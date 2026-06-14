@@ -1,0 +1,630 @@
+# 🚀 Real Data Integration Setup Guide
+
+Complete guide to set up real data integration for Canteen Monitor with YOLOv8 AI detection.
+
+---
+
+## 📋 Overview
+
+This guide will help you set up:
+1. **YOLOv8 Detection Service** - Real-time people detection from CCTV/Webcam
+2. **WebSocket Service** - Real-time data streaming to dashboard
+3. **API Integration** - Automatic data ingestion
+
+---
+
+## 🎯 Architecture
+
+```
+┌─────────────────┐
+│  CCTV Camera    │
+│  / Webcam       │
+└────────┬────────┘
+         │
+         ↓
+┌─────────────────┐
+│  YOLOv8 Python  │
+│  Detection      │
+│  Service        │
+└────────┬────────┘
+         │ POST /api/crowd/current
+         ↓
+┌─────────────────┐
+│  Next.js API    │
+│  (Backend)      │
+└────────┬────────┘
+         │
+         ↓
+┌─────────────────┐
+│  SQLite DB      │
+└────────┬────────┘
+         │
+         ↓
+┌─────────────────┐
+│  WebSocket      │
+│  Service        │
+└────────┬────────┘
+         │ emit
+         ↓
+┌─────────────────┐
+│  Dashboard      │
+│  (Real-time)    │
+└─────────────────┘
+```
+
+---
+
+## 🔧 Prerequisites
+
+### System Requirements
+
+- **Node.js** 18+ installed
+- **Python** 3.8+ installed
+- **Bun** installed (for Next.js)
+- **Webcam** or **CCTV Camera** with RTSP support
+- **2GB RAM** minimum
+- **Network connection** (localhost)
+
+### Check Prerequisites
+
+```bash
+# Check Node.js
+node --version  # Should be v18+
+
+# Check Python
+python3 --version  # Should be 3.8+
+
+# Check Bun
+bun --version
+
+# Check OpenCV (optional)
+python3 -c "import cv2; print(cv2.__version__)"
+```
+
+---
+
+## 📦 Installation Steps
+
+### Step 1: Install Node.js Dependencies
+
+```bash
+cd /home/z/my-project
+
+# Install Next.js dependencies
+bun install
+
+# Install WebSocket service dependencies
+cd mini-services/websocket-service
+bun install
+cd ../..
+```
+
+### Step 2: Setup Python Environment
+
+```bash
+cd mini-services/yolo-detection
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+# Linux/macOS:
+source venv/bin/activate
+
+# Windows:
+venv\Scripts\activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+### Step 3: Verify Installation
+
+```bash
+# Test Python environment
+python3 -c "import ultralytics; print('Ultralytics OK')"
+python3 -c "import cv2; print('OpenCV OK')"
+python3 -c "import requests; print('Requests OK')"
+
+# Test Node.js
+cd mini-services/websocket-service
+node --version
+cd ../..
+```
+
+---
+
+## 🎬 Setup Options
+
+### Option 1: Webcam (Quick Start) ✅
+
+**Best for:** Testing, personal use, small canteens
+
+```python
+# Edit mini-services/yolo-detection/detection.py
+CONFIG = {
+    'camera_source': 0,  # Built-in webcam
+    'camera_width': 640,
+    'camera_height': 480,
+    # ... rest of config
+}
+```
+
+### Option 2: USB Camera
+
+**Best for:** Dedicated webcam setup
+
+```python
+CONFIG = {
+    'camera_source': 1,  # First USB camera
+    # or 2, 3, etc. for multiple cameras
+}
+```
+
+### Option 3: IP Camera (RTSP) 🎯
+
+**Best for:** Professional CCTV setup
+
+```python
+CONFIG = {
+    'camera_source': 'rtsp://admin:password@192.168.1.100:554/stream',
+    # Or:
+    'camera_source': 'rtsp://192.168.1.100:554/user=admin&password=pass&channel=1&stream=0.sdp',
+}
+```
+
+### Option 4: HTTP Camera
+
+```python
+CONFIG = {
+    'camera_source': 'http://192.168.1.100/mjpg/video.mjpg',
+}
+```
+
+---
+
+## 🚀 Running the Services
+
+### Method 1: Run All Services (Recommended)
+
+#### Terminal 1: Next.js App
+```bash
+cd /home/z/my-project
+bun run dev
+```
+**Runs on:** Port 3000
+
+#### Terminal 2: WebSocket Service
+```bash
+cd /home/z/my-project/mini-services/websocket-service
+bun run dev
+```
+**Runs on:** Port 3002
+
+#### Terminal 3: YOLOv8 Detection
+```bash
+cd /home/z/my-project/mini-services/yolo-detection
+source venv/bin/activate  # Linux/macOS
+# or venv\Scripts\activate  # Windows
+python3 detection.py
+```
+
+---
+
+### Method 2: Background Services (Production)
+
+#### Create Start Script
+
+Create `/home/z/my-project/start-services.sh`:
+
+```bash
+#!/bin/bash
+
+echo "Starting Canteen Monitor Services..."
+
+# Kill existing processes
+pkill -f "bun run dev"
+pkill -f "node.*index.js"
+pkill -f "python3.*detection.py"
+
+# Start Next.js
+echo "Starting Next.js..."
+cd /home/z/my-project
+nohup bun run dev > nextjs.log 2>&1 &
+echo "Next.js started on port 3000"
+
+# Start WebSocket
+echo "Starting WebSocket service..."
+cd /home/z/my-project/mini-services/websocket-service
+nohup bun run dev > websocket.log 2>&1 &
+echo "WebSocket started on port 3002"
+
+# Start YOLOv8
+echo "Starting YOLOv8 detection..."
+cd /home/z/my-project/mini-services/yolo-detection
+source venv/bin/activate
+nohup python3 detection.py > detection.log 2>&1 &
+echo "YOLOv8 detection started"
+
+echo "All services started!"
+echo "Check logs:"
+echo "  Next.js:    tail -f /home/z/my-project/nextjs.log"
+echo "  WebSocket:  tail -f /home/z/my-project/mini-services/websocket-service/websocket.log"
+echo "  Detection:  tail -f /home/z/my-project/mini-services/yolo-detection/detection.log"
+```
+
+#### Make it executable and run
+```bash
+chmod +x /home/z/my-project/start-services.sh
+/home/z/my-project/start-services.sh
+```
+
+---
+
+## ⚙️ Configuration
+
+### YOLOv8 Detection Config
+
+Edit `mini-services/yolo-detection/detection.py`:
+
+```python
+CONFIG = {
+    # Camera source (0 = webcam, or RTSP URL)
+    'camera_source': 0,
+
+    # Resolution
+    'camera_width': 640,
+    'camera_height': 480,
+
+    # Model settings
+    'model_path': 'yolov8n.pt',
+    'confidence_threshold': 0.5,  # Lower = more detections
+    'iou_threshold': 0.45,
+
+    # Queue area (percentage of frame)
+    'queue_area': {
+        'x': 0.5,      # 50% from left
+        'y': 0.6,      # 60% from top
+        'width': 0.4,  # 40% width
+        'height': 0.3  # 30% height
+    },
+
+    # API endpoint
+    'api_url': 'http://localhost:3000/api/crowd/current',
+    'update_interval': 5,  # Send data every 5 seconds
+
+    # Logging
+    'log_level': 'INFO'
+}
+```
+
+### Queue Area Setup
+
+To configure the queue area:
+
+1. Start detection service
+2. Look at the detection window
+3. Observe where people queue
+4. Adjust `queue_area` coordinates
+
+**Example: Queue on the right side**
+```python
+'queue_area': {
+    'x': 0.6,      # Start at 60% from left
+    'y': 0.5,      # Start at 50% from top
+    'width': 0.35, # 35% of frame width
+    'height': 0.4  # 40% of frame height
+}
+```
+
+**Example: Queue at the bottom**
+```python
+'queue_area': {
+    'x': 0.2,      # Start at 20% from left
+    'y': 0.7,      # Start at 70% from top
+    'width': 0.6,  # 60% of frame width
+    'height': 0.25 # 25% of frame height
+}
+```
+
+---
+
+## 🧪 Testing
+
+### Test 1: Camera Connection
+
+```bash
+cd mini-services/yolo-detection
+python3 -c "
+import cv2
+cap = cv2.VideoCapture(0)
+print('Camera opened:', cap.isOpened())
+cap.release()
+"
+```
+
+### Test 2: API Connection
+
+```bash
+# Test API endpoint
+curl http://localhost:3000/api/crowd/current
+
+# Send test data
+curl -X POST http://localhost:3000/api/crowd/current \
+  -H "Content-Type: application/json" \
+  -d '{"crowdCount": 45, "queueCount": 10, "waitingTime": 5.5}'
+```
+
+### Test 3: WebSocket Connection
+
+```bash
+# Check WebSocket service
+curl http://localhost:3002
+
+# Should return: "WebSocket Service Running"
+```
+
+### Test 4: Full Integration
+
+1. Start all 3 services
+2. Stand in front of camera
+3. Check dashboard updates
+4. Verify crowd count changes
+
+---
+
+## 📊 Data Flow
+
+```
+YOLOv8 Service (Python)
+    ↓
+POST /api/crowd/current
+    ↓
+Next.js API Route
+    ↓
+Save to SQLite DB
+    ↓
+WebSocket Service reads DB
+    ↓
+Emit to Dashboard
+    ↓
+Dashboard updates in real-time
+```
+
+---
+
+## 🎯 Real-World Setup
+
+### Production Checklist
+
+- [ ] Install Python virtual environment
+- [ ] Install YOLOv8 model
+- [ ] Configure camera source (RTSP/Webcam)
+- [ ] Set queue area coordinates
+- [ ] Test camera connection
+- [ ] Test API connection
+- [ ] Start WebSocket service
+- [ ] Start YOLOv8 detection
+- [ ] Verify dashboard updates
+- [ ] Set up monitoring scripts
+- [ ] Configure alerts
+- [ ] Document IP addresses
+
+---
+
+## 🔒 Security
+
+### Camera Credentials
+
+Use environment variables for security:
+
+```python
+import os
+
+CONFIG = {
+    'camera_source': os.getenv('CAMERA_RTSP_URL', 0),
+    'api_url': os.getenv('API_URL', 'http://localhost:3000/api/crowd/current'),
+}
+```
+
+Set environment variables:
+```bash
+export CAMERA_RTSP_URL='rtsp://admin:password@ip:port/stream'
+export API_URL='http://localhost:3000/api/crowd/current'
+python3 detection.py
+```
+
+### API Authentication
+
+Add authentication to API routes:
+
+```typescript
+// API route with auth
+export async function POST(request: Request) {
+  const auth = request.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.API_TOKEN}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  // ... rest of code
+}
+```
+
+---
+
+## 📈 Performance Optimization
+
+### For Better FPS
+
+1. **Use YOLOv8n**: Smallest, fastest model
+2. **Lower resolution**: 640x480 instead of 1280x720
+3. **Disable display**: Comment out `cv2.imshow()` in production
+4. **Use GPU**: If available, install CUDA
+
+### For Accuracy
+
+1. **Use YOLOv8m or larger**: More accurate, slower
+2. **Higher resolution**: Better detection
+3. **Train custom model**: On your canteen data
+
+### For Battery Life (Laptop)
+
+1. **Reduce update interval**: 10 seconds instead of 5
+2. **Lower resolution**
+3. **Use smaller model**
+
+---
+
+## 🐛 Troubleshooting
+
+### Camera not opening
+
+**Problem:** `Failed to open camera`
+
+**Solution:**
+```bash
+# Check available cameras
+ls /dev/video*  # Linux
+
+# Test camera
+python3 -c "import cv2; cap = cv2.VideoCapture(0); print(cap.isOpened())"
+
+# Try different source
+'camera_source': 1  # or 2, 3, etc.
+```
+
+### Model not loading
+
+**Problem:** `Failed to load model`
+
+**Solution:**
+```bash
+# Install ultralytics
+pip install ultralytics --upgrade
+
+# Download model manually
+wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
+```
+
+### API connection error
+
+**Problem:** `Failed to send data`
+
+**Solution:**
+```bash
+# Check Next.js is running
+curl http://localhost:3000
+
+# Test API endpoint
+curl http://localhost:3000/api/crowd/current
+
+# Check firewall
+sudo ufw allow 3000
+```
+
+### Dashboard not updating
+
+**Problem:** Data not showing in dashboard
+
+**Solution:**
+```bash
+# Check all services running
+ps aux | grep "bun run dev"
+ps aux | grep "node.*index.js"
+ps aux | grep "python3.*detection"
+
+# Check logs
+tail -f nextjs.log
+tail -f detection.log
+tail -f websocket.log
+
+# Test manual data POST
+curl -X POST http://localhost:3000/api/crowd/current \
+  -H "Content-Type: application/json" \
+  -d '{"crowdCount": 30, "queueCount": 5, "waitingTime": 3.5}'
+```
+
+### Low FPS
+
+**Problem:** Detection is slow
+
+**Solution:**
+- Reduce resolution to 640x480
+- Use YOLOv8n (nano model)
+- Disable display window
+- Use GPU if available
+
+---
+
+## 📞 Support
+
+### Get Help
+
+1. Check logs for errors
+2. Verify camera connection
+3. Test API endpoints
+4. Review configuration
+5. Contact support
+
+### Contact
+
+- Email: support@canteenmonitor.com
+- Phone: +91 98765 43210
+
+---
+
+## ✅ Quick Start Summary
+
+```bash
+# 1. Install dependencies
+cd /home/z/my-project
+bun install
+
+cd mini-services/websocket-service
+bun install
+
+cd ../yolo-detection
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Start services (3 terminals)
+
+# Terminal 1 - Next.js
+cd /home/z/my-project
+bun run dev
+
+# Terminal 2 - WebSocket
+cd /home/z/my-project/mini-services/websocket-service
+bun run dev
+
+# Terminal 3 - YOLOv8
+cd /home/z/my-project/mini-services/yolo-detection
+source venv/bin/activate
+python3 detection.py
+
+# 3. Open dashboard
+# Navigate to: http://localhost:3000
+# (Or use Preview Panel)
+
+# Done! Real-time detection is now active! 🎉
+```
+
+---
+
+## 🎉 Success Indicators
+
+When everything is working:
+
+✅ Camera window opens with detection boxes
+✅ Console shows: "FPS: 30 | Crowd: 42 | Queue: 8 | Wait: 6.5m"
+✅ Dashboard stats update every 5 seconds
+✅ Real-time crowd count shown
+✅ Queue detection working
+✅ WebSocket connected
+✅ Alerts generated for high crowd
+
+---
+
+**Now you have a REAL DATA professional project! 🚀**
+
+**For production deployment, see PRODUCTION-DEPLOYMENT.md**
