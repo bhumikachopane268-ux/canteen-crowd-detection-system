@@ -1,1 +1,0 @@
-# canteen-crowd-detection-system
